@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+ <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+<style>
+html, body, h1, h2, h3, h4, h5, h6 {
+  font-family: "Comic Sans MS", cursive, sans-serif;
+}
+</style> 
+<div class="container-fluid">
+  <h2 style="font-family:cursive;">Hello Shiny!</h2>
+  <div class="row">
+    <div class="col-sm-4">
+      <form class="well">
+        <div class="form-group shiny-input-container">
+          <label class="control-label" for="bins">Number of bins:</label>
+          <input class="js-range-slider" id="bins" data-min="1" data-max="50" data-from="30" data-step="1" data-grid="true" data-grid-num="9.8" data-grid-snap="false" data-prettify-separator="," data-prettify-enabled="true" data-keyboard="true" data-keyboard-step="2.04081632653061" data-data-type="number"/>
+        </div>
+      </form>
+    </div>
+    <div class="col-sm-8">
+      <div id="distPlot" class="shiny-plot-output" style="width: 100% ; height: 400px"></div>
+    </div>
+  </div>
+</div> 
