@@ -42,8 +42,9 @@ border-top-color:#FBDD63;
     ),
   sidebarLayout( 
     sidebarPanel(width=4,
-      selectInput("name","Select Name",choices=names,multiple=TRUE),
+      selectInput("user","Select User",choices=names),
       fluidRow(column(12,h4(HTML("<b>Schedule Horizon:</b>")))),
+      selectInput("name","Select Staff",choices=names,multiple=TRUE),
       fluidRow(
         column(6,dateInput("date1","Start")),
         column(6,dateInput("date2","End"))
@@ -58,10 +59,14 @@ border-top-color:#FBDD63;
       
     ),
     mainPanel(
-      #textOutput("test"),
+      textOutput("test"),
       column(12,h1("Schedule")),
       DTOutput(outputId = "schedule"),
-      DTOutput(outputId = "details")
+      column(12,h1("Changes")),
+      DTOutput(outputId = "details"),
+      fluidRow(column(1,actionButton("sell","   *Sell*   ")),
+               column(1,actionButton("buy","   *Buy*   "))
+               )
       
     )
     
@@ -76,7 +81,31 @@ border-top-color:#FBDD63;
 server <- function(input, output, session) {
   
   values <- reactiveValues()
-  values$df <- data.frame()
+  observe({
+  d1 <- input$date1
+  d2 <- input$date2 
+  days <- seq(d1,d2,1)
+  sched <- data.frame(
+    id="",
+    days=days,
+    stringsAsFactors = FALSE
+  ) %>% 
+    spread(days,id) %>%
+    mutate(id=1)
+  staff <- data.frame(id=1,Staff=names,stringsAsFactors = FALSE)
+  values$df <- staff %>% 
+    inner_join(sched,by="id") %>% 
+    select(-id)
+  })
+  values$df2 <- data.frame(
+   Shift_Date=character(),
+   Shift_Time=character(),
+   Seller=character(),
+   Seller_Comments=character(),
+   Buyer=character(),
+   Buyer_Comments=character(),
+   Manager_Comments=character(),
+   stringsAsFactors = FALSE)
   
   output$day <- renderUI({
     d1 <- input$date1
@@ -86,34 +115,69 @@ server <- function(input, output, session) {
   })
   
   output$boss <- renderUI({
-    if(is.null(input$name)) {
+    if(is.null(input$user)) {
       column(12,h6(""))
     }
-    else if(input$name==boss) {
+    else if(input$user==boss) {
     actionButton("submit","Submit")
     }
 
   })
   
   output$schedule <- renderDT({
-    d1 <- input$date1
-    d2 <- input$date2 
-    days <- seq(d1,d2,1)
-    sched <- data.frame(
-      id="",#c(1:length(days)),
-      days=days
-    ) %>% 
-      spread(days,id) %>%
-      mutate(id=1)
-   staff <- data.frame(id=1,Staff=names)
-   values$df <- staff %>% 
-     inner_join(sched,by="id") %>% 
-      select(-id)
-    values$df 
+    var <- if_else(input$user==boss,TRUE,FALSE)
+   datatable(values$df, editable=var,
+             selection=list(mode="single", target="cell")) 
+  })
+  
+  observeEvent(input$submit,{
+    if(!is.null(input$date)) {
+      shift <- paste(input$start,input$end,sep='-') %>% 
+        str_replace(".5", ':30')
+      values$df[values$df$Staff %in% input$name,input$date] <-shift
+    }
+     })
+  
+  output$details <- renderDT(
+    datatable(values$df2, editable=TRUE
+    )
+  )
+  
+  observeEvent(input$sell,{
+    
+    if(!is.null(input$schedule_cells_selected)) {
+      
+      r <- input$schedule_cells_selected[1,1]
+      c <- input$schedule_cells_selected[1,2]
+      
+      if(input$name==values$df[r,1]) #only allow ppl to sell their OWN shifts - col 1 is name
+      {
+      add_rows <- data.frame(Shift_Date=colnames(values$df[c]),
+                             Shift_Time=values$df[r,c],
+                             Seller=input$name,
+                             Seller_Comments="",
+                             Buyer="",
+                             Buyer_Comments="",
+                             Manager_Comments="")
+      
+      values$df2 <- values$df2 %>% 
+        bind_rows(add_rows) 
+      }
+      
+      #values$selected<- NULL
+    }
+  })
+  
+  observeEvent(input$details_cell_edit, {
+    values$df2[input$details_cell_edit$row,input$details_cell_edit$col] <<- paste(
+      input$details_cell_edit$value,paste0("[",input$name,"]")
+    )
   })
   
   output$test<- renderText({
-    class(values$df$'2019-10-30')
+    row <- input$schedule_cells_selected[1,1]
+    col <- input$schedule_cells_selected[1,2]
+    colnames(values$df[col])
   })
   
   
