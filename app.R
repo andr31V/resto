@@ -81,7 +81,9 @@ border-top-color:#FBDD63;
 server <- function(input, output, session) {
   
   values <- reactiveValues()
+  
   observe({
+    
   d1 <- input$date1
   d2 <- input$date2 
   days <- seq(d1,d2,1)
@@ -93,19 +95,24 @@ server <- function(input, output, session) {
     spread(days,id) %>%
     mutate(id=1)
   staff <- data.frame(id=1,Staff=names,stringsAsFactors = FALSE)
+  
   values$df <- staff %>% 
     inner_join(sched,by="id") %>% 
     select(-id)
-  })
+
   values$df2 <- data.frame(
    Shift_Date=character(),
    Shift_Time=character(),
    Seller=character(),
    Seller_Comments=character(),
-   Buyer=character(),
-   Buyer_Comments=character(),
-   Manager_Comments=character(),
+   Buyer=character(), #this should be a comma separated list
+   #Buyer_Comments=character(),
+   #Manager_Comments=character(),
    stringsAsFactors = FALSE)
+  
+  
+  
+  })
   
   output$day <- renderUI({
     d1 <- input$date1
@@ -138,8 +145,11 @@ server <- function(input, output, session) {
     }
      })
   
+  
+  ###data.frame(x="12-13|13-14") %>%  separate(x,c("a","b"),sep = "([\\|])")
+  
   output$details <- renderDT(
-    datatable(values$df2, editable=TRUE
+    datatable(values$df2, editable=TRUE,selection=list(mode="single")
     )
   )
   
@@ -150,15 +160,16 @@ server <- function(input, output, session) {
       r <- input$schedule_cells_selected[1,1]
       c <- input$schedule_cells_selected[1,2]
       
-      if(input$name==values$df[r,1]) #only allow ppl to sell their OWN shifts - col 1 is name
+      if(input$user==values$df[r,1]) #only allow ppl to sell their OWN shifts - col 1 is name
       {
       add_rows <- data.frame(Shift_Date=colnames(values$df[c]),
                              Shift_Time=values$df[r,c],
-                             Seller=input$name,
+                             Seller=input$user,
                              Seller_Comments="",
-                             Buyer="",
-                             Buyer_Comments="",
-                             Manager_Comments="")
+                             Buyer=""
+                             #Buyer_Comments="",
+                             #Manager_Comments=""
+                             )
       
       values$df2 <- values$df2 %>% 
         bind_rows(add_rows) 
@@ -168,9 +179,30 @@ server <- function(input, output, session) {
     }
   })
   
+  observeEvent(input$buy,{
+    
+    if(!is.null(input$details_rows_selected)) {
+      
+      #r <- input$schedule_cells_selected[1,1]
+      #c <- input$schedule_cells_selected[1,2]
+        
+        values$df2 <- values$df2 %>% 
+          mutate(Buyer=if_else(
+            #Shift_Date==colnames(values$df[c]) & Shift_Time==values$df[r,c],
+            row_number()==input$details_rows_selected,
+            if_else(Buyer=="",input$user,paste(Buyer,input$user,sep=",")),
+            Buyer
+          )
+          )
+
+      
+      #values$selected<- NULL
+    }
+  })
+  
   observeEvent(input$details_cell_edit, {
     values$df2[input$details_cell_edit$row,input$details_cell_edit$col] <<- paste(
-      input$details_cell_edit$value,paste0("[",input$name,"]")
+      input$details_cell_edit$value,paste0("[",input$user,"]")
     )
   })
   
@@ -178,6 +210,7 @@ server <- function(input, output, session) {
     row <- input$schedule_cells_selected[1,1]
     col <- input$schedule_cells_selected[1,2]
     colnames(values$df[col])
+    input$details_rows_selected
   })
   
   
