@@ -98,7 +98,12 @@ server <- function(input, output, session) {
   
   values$df <- staff %>% 
     inner_join(sched,by="id") %>% 
-    select(-id)
+    select(-id) %>% 
+    unite(Hours,-Staff,sep="|",remove=FALSE) %>% 
+    mutate(Hours=if_else(str_replace_all(Hours,"[\\|]","")=="","0",Hours)) %>% 
+    mutate(Hours=str_replace_all(Hours, "[\\|]", "+")) %>% 
+    rowwise() %>% 
+    mutate(Hours=-1*eval(parse(text=Hours)))
 
   values$df2 <- data.frame(
    Shift_Date=character(),
@@ -142,11 +147,31 @@ server <- function(input, output, session) {
       shift <- paste(input$start,input$end,sep='-') %>% 
         str_replace(".5", ':30')
       values$df[values$df$Staff %in% input$name,input$date] <-shift
+      values$df <- values$df %>% 
+        select(-Hours) %>% 
+        unite(Hours,-Staff,sep="|",remove=FALSE) %>% 
+        mutate(Hours=if_else(str_replace_all(Hours,"[\\|]","")=="","0",Hours)) %>% 
+        mutate(Hours=str_replace_all(Hours, "[\\|]", "+")) %>% 
+        rowwise() %>% 
+        mutate(Hours=-1*eval(parse(text=Hours)))
     }
      })
   
+  observeEvent(input$schedule_cell_edit, {
+    cell <- input$schedule_cell_edit
+    values$df[cell$row, cell$col] <- cell$value
+    values$df <- values$df %>% 
+      select(-Hours) %>% 
+      unite(Hours,-Staff,sep="|",remove=FALSE) %>% 
+      mutate(Hours=if_else(str_replace_all(Hours,"[\\|]","")=="","0",Hours)) %>% 
+      mutate(Hours=str_replace_all(Hours, "[\\|]", "+")) %>% 
+      rowwise() %>% 
+      mutate(Hours=-1*eval(parse(text=Hours)))
+  })
   
-  ###data.frame(x="12-13|13-14") %>%  separate(x,c("a","b"),sep = "([\\|])")
+  
+  #data.frame(x="12-13|13-14") %>%  separate(x,c("a","b"),sep = "([\\|])") %>% 
+  #mutate(test=eval(parse(text=a)))
   
   output$details <- renderDT(
     datatable(values$df2, editable=TRUE,selection=list(mode="single")
