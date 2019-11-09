@@ -59,14 +59,15 @@ border-top-color:#FBDD63;
       
     ),
     mainPanel(
-      textOutput("test"),
+      #textOutput("test"),
       column(12,h1("Schedule")),
       DTOutput(outputId = "schedule"),
       column(12,h1("Changes")),
       DTOutput(outputId = "details"),
       fluidRow(column(1,actionButton("sell","   *Sell*   ")),
                column(1,actionButton("buy","   *Buy*   "))
-               )
+               ),
+      fluidRow(tableOutput("test"))
       
     )
     
@@ -144,8 +145,8 @@ server <- function(input, output, session) {
   
   observeEvent(input$submit,{
     if(!is.null(input$date)) {
-      shift <- paste(input$start,input$end,sep='-') %>% 
-        str_replace(".5", ':30')
+      shift <- paste(input$start,input$end,sep='-') #%>% 
+        #str_replace(".5", ':30')
       values$df[values$df$Staff %in% input$name,input$date] <-shift
       values$df <- values$df %>% 
         select(-Hours) %>% 
@@ -153,7 +154,8 @@ server <- function(input, output, session) {
         mutate(Hours=if_else(str_replace_all(Hours,"[\\|]","")=="","0",Hours)) %>% 
         mutate(Hours=str_replace_all(Hours, "[\\|]", "+")) %>% 
         rowwise() %>% 
-        mutate(Hours=-1*eval(parse(text=Hours)))
+        mutate(Hours=-1*eval(parse(text=Hours))) %>% 
+        mutate_at(vars(-Staff,-Hours),funs(str_replace_all(.,".5", ':30')))
     }
      })
   
@@ -162,11 +164,13 @@ server <- function(input, output, session) {
     values$df[cell$row, cell$col] <- cell$value
     values$df <- values$df %>% 
       select(-Hours) %>% 
+      mutate_all(funs(str_replace_all(.,":30", '.5'))) %>% 
       unite(Hours,-Staff,sep="|",remove=FALSE) %>% 
       mutate(Hours=if_else(str_replace_all(Hours,"[\\|]","")=="","0",Hours)) %>% 
       mutate(Hours=str_replace_all(Hours, "[\\|]", "+")) %>% 
       rowwise() %>% 
-      mutate(Hours=-1*eval(parse(text=Hours)))
+      mutate(Hours=-1*eval(parse(text=Hours))) %>% 
+      mutate_at(vars(-Staff,-Hours),funs(str_replace_all(.,".5", ':30')))
   })
   
   
@@ -231,11 +235,16 @@ server <- function(input, output, session) {
     )
   })
   
-  output$test<- renderText({
-    row <- input$schedule_cells_selected[1,1]
-    col <- input$schedule_cells_selected[1,2]
-    colnames(values$df[col])
-    input$details_rows_selected
+  output$test<- renderTable({
+    #row <- input$schedule_cells_selected[1,1]
+    #col <- input$schedule_cells_selected[1,2]
+    #colnames(values$df[col])
+    #input$details_rows_selected
+    test <- values$df %>% 
+      select(-Hours) %>% 
+      gather(Date,Shift,-Staff) %>% 
+      filter(Shift!=""&is.null(Shift)==FALSE)
+    test
   })
   
   
