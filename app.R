@@ -35,6 +35,17 @@ border-right-color:#FBDD63;
 border-top-color:#FBDD63;
 }
 
+body { 
+            background-color: #1A4C64;
+            color:black
+            
+            
+}
+label {
+  color:black
+}
+
+
     "))
   ),
   headerPanel(
@@ -42,7 +53,7 @@ border-top-color:#FBDD63;
     ),
   sidebarLayout( 
     sidebarPanel(width=4,
-      selectInput("user","Select User",choices=names),
+      selectInput("user","Select User",choices=c("Enter Your Name"="",names)),
       fluidRow(column(12,h4(HTML("<b>Schedule Horizon:</b>")))),
       selectInput("name","Select Staff",choices=names,multiple=TRUE),
       fluidRow(
@@ -55,7 +66,8 @@ border-top-color:#FBDD63;
         column(6,numericInput("start","Start",12,min=0,max=23,step=.5)),
         column(6,numericInput("end","End",12,min=0,max=23,step=.5))
       ),
-      uiOutput("boss")
+      uiOutput("boss"),
+      #fluidRow(column(12,img(src='pasta.jpg', align = "center")))
       
     ),
     mainPanel(
@@ -67,7 +79,8 @@ border-top-color:#FBDD63;
       fluidRow(column(1,actionButton("sell","   *Sell*   ")),
                column(1,actionButton("buy","   *Buy*   "))
                ),
-      fluidRow(tableOutput("test"))
+      fluidRow(tableOutput("test")),
+      fluidRow(textOutput("test2"))
       
     )
     
@@ -84,7 +97,7 @@ server <- function(input, output, session) {
   values <- reactiveValues()
   
   observe({
-    
+  
   d1 <- input$date1
   d2 <- input$date2 
   days <- seq(d1,d2,1)
@@ -116,11 +129,12 @@ server <- function(input, output, session) {
    #Manager_Comments=character(),
    stringsAsFactors = FALSE)
   
-  
-  
   })
   
   output$day <- renderUI({
+    
+    validate(need(input$date1<=input$date2 ,"Please select a valid time frame"))
+    
     d1 <- input$date1
     d2 <- input$date2 
     days <- seq(d1,d2,1)
@@ -128,12 +142,12 @@ server <- function(input, output, session) {
   })
   
   output$boss <- renderUI({
-    if(is.null(input$user)) {
-      column(12,h6(""))
-    }
-    else if(input$user==boss) {
+    
+    validate(need(input$user==boss , paste("Only",boss,"can submit shifts")))
+    validate(need(!is.null(input$name) ,"Please select staff to assign"))
+    validate(need(input$start<input$end ,"Please select a valid time frame"))
+    
     actionButton("submit","Submit")
-    }
 
   })
   
@@ -144,10 +158,18 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$submit,{
+    
     if(!is.null(input$date)) {
-      shift <- paste(input$start,input$end,sep='-') #%>% 
-        #str_replace(".5", ':30')
-      values$df[values$df$Staff %in% input$name,input$date] <-shift
+      
+      shift <- paste(input$start,input$end,sep='-') 
+      values$df[values$df$Staff %in% input$name,input$date] <- #str_replace(
+        as.character(
+        paste(
+        values$df[values$df$Staff %in% input$name,input$date][[1]],
+        shift,
+        sep="|")
+      )
+      #, "[//|]", "")
       values$df <- values$df %>% 
         select(-Hours) %>% 
         unite(Hours,-Staff,sep="|",remove=FALSE) %>% 
@@ -184,15 +206,15 @@ server <- function(input, output, session) {
   
   observeEvent(input$sell,{
     
-    if(!is.null(input$schedule_cells_selected)) {
+  validate(need(length(input$schedule_cells_selected) > 0 ,"Select shift desired for sale"))
       
       r <- input$schedule_cells_selected[1,1]
       c <- input$schedule_cells_selected[1,2]
       
-      if(input$user==values$df[r,1]) #only allow ppl to sell their OWN shifts - col 1 is name
-      {
+      validate(need(input$user==values$df[r,1] ,"Access denied: this is not your shift!"))
+      
       add_rows <- data.frame(Shift_Date=colnames(values$df[c]),
-                             Shift_Time=values$df[r,c],
+                             Shift_Time=as.character(values$df[r,c]),
                              Seller=input$user,
                              Seller_Comments="",
                              Buyer=""
@@ -202,10 +224,7 @@ server <- function(input, output, session) {
       
       values$df2 <- values$df2 %>% 
         bind_rows(add_rows) 
-      }
-      
-      #values$selected<- NULL
-    }
+
   })
   
   observeEvent(input$buy,{
@@ -245,6 +264,13 @@ server <- function(input, output, session) {
       gather(Date,Shift,-Staff) %>% 
       filter(Shift!=""&is.null(Shift)==FALSE)
     test
+  })
+  
+  output$test2 <- renderText({
+    #r <- input$schedule_cells_selected[1,1]
+    #c <- input$schedule_cells_selected[1,2]
+    #as.character(values$df[r,c])
+ 
   })
   
   
