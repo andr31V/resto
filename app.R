@@ -41,11 +41,18 @@ body {
             
             
 }
-label {
-  color:black
+
+
+#buy{background-color:green}
+#sell{background-color:red}
+
+.dataTables_filter, .dataTables_info, .dataTables_paginate, .dataTables_length   {
+color: black !important;
 }
 
-
+<!-- 
+above block is used for data table navigation text
+-->
     "))
   ),
   headerPanel(
@@ -67,20 +74,23 @@ label {
         column(6,numericInput("end","End",12,min=0,max=23,step=.5))
       ),
       uiOutput("boss"),
-      #fluidRow(column(12,img(src='pasta.jpg', align = "center")))
+      tags$img(src='pasta.png', align = "center", width="100%"
+                                  #style="opacity: 0.2;"
+               )
+      
+                      
       
     ),
     mainPanel(
-      #textOutput("test"),
       column(12,h1("Schedule")),
       DTOutput(outputId = "schedule"),
       column(12,h1("Changes")),
       DTOutput(outputId = "details"),
-      fluidRow(column(1,actionButton("sell","   *Sell*   ")),
-               column(1,actionButton("buy","   *Buy*   "))
+      fluidRow(column(1,actionButton("sell","   Sell   ")),
+               column(1,actionButton("buy","   Buy   "))
                ),
       fluidRow(tableOutput("test")),
-      fluidRow(textOutput("test2"))
+      fluidRow(tableOutput("test2"))
       
     )
     
@@ -199,10 +209,18 @@ server <- function(input, output, session) {
   #data.frame(x="12-13|13-14") %>%  separate(x,c("a","b"),sep = "([\\|])") %>% 
   #mutate(test=eval(parse(text=a)))
   
-  output$details <- renderDT(
-    datatable(values$df2, editable=TRUE,selection=list(mode="single")
-    )
-  )
+  output$details <- renderDT({
+    #only allow sellers to edit their own data
+    if (length(input$schedule_cells_selected) > 0) {
+    r <- input$schedule_cells_selected[1,1]
+    seller <- values$df[r,]$Staff
+    var <- if_else(input$user==seller,TRUE,FALSE)
+    }
+    else {
+    var <- FALSE
+    }
+    datatable(values$df2, editable=var,selection=list(mode="single"))
+  })
   
   observeEvent(input$sell,{
     
@@ -255,22 +273,11 @@ server <- function(input, output, session) {
   })
   
   output$test<- renderTable({
-    #row <- input$schedule_cells_selected[1,1]
-    #col <- input$schedule_cells_selected[1,2]
-    #colnames(values$df[col])
-    #input$details_rows_selected
-    test <- values$df %>% 
-      select(-Hours) %>% 
-      gather(Date,Shift,-Staff) %>% 
-      filter(Shift!=""&is.null(Shift)==FALSE)
-    test
+    values$df
   })
   
-  output$test2 <- renderText({
-    #r <- input$schedule_cells_selected[1,1]
-    #c <- input$schedule_cells_selected[1,2]
-    #as.character(values$df[r,c])
- 
+  output$test2 <- renderTable({
+    values$df2
   })
   
   
