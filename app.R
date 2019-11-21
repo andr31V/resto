@@ -5,8 +5,22 @@ library(shinyjs)
 library(DT)
 
 
-names <- c("Jon","Luca","Munir")
-boss <- "Jon"
+names <- c(
+ "Luca"
+,"Frederik"
+,"Jon"
+,"Matteo"
+,"Denner"
+,"Benja"
+,"Mounir"
+,"Rasmus W"
+,"Bes"
+,"Albert"
+,"jan"
+,"Mehdi"
+,"ML"
+)
+boss <- c("Jon","Luca")
 
 Sys.setenv(TZ='CET') #copenhagen
 
@@ -76,8 +90,8 @@ body {
 
 
 #buy{background-color:yellow}
-#sell{background-color:red}
-#del{background-color:blue}
+#sell{background-color:blue}
+#del{background-color:red}
 
 .dataTables_filter, .dataTables_info, .dataTables_paginate, .dataTables_length   {
 color: black !important;
@@ -212,7 +226,7 @@ server <- function(input, output, session) {
   
   output$boss <- renderUI({
     
-    validate(need(input$user==boss , paste("Only",boss,"can submit shifts")))
+    validate(need(input$user %in% boss , paste("You are not authorized to submit shifts")))
     validate(need(!is.null(input$name) ,"Please select staff to assign"))
     validate(need(!is.null(input$date), "Please select a date to assign"))
     validate(need(input$start<input$end ,"Please select a valid time frame"))
@@ -222,7 +236,7 @@ server <- function(input, output, session) {
   })
   
   output$schedule <- renderDT({
-    var <- if_else(input$user==boss,TRUE,FALSE)
+    var <- if_else(input$user %in% boss,TRUE,FALSE)
    datatable(values$df, editable=var,
              selection=list(mode="single", target="cell")) 
   })
@@ -248,6 +262,7 @@ server <- function(input, output, session) {
         mutate(Hours=if_else(str_replace_all(Hours,"[\\|]","")=="","0",Hours)) %>%  #if there are no shifts, set hours=0. otherwise...
         mutate(Hours=str_replace_all(Hours, "[\\|]", "+")) %>% #replace the shift separator - | - into the + sign to automatically calculate
         mutate(Hours=str_replace_all(Hours,":30", '.5')) %>%  #ensure formatted data read in correctly for mathematical calculation
+        mutate(Hours=paste(Hours, "0", sep="+")) %>% 
         rowwise() %>%  #calculate row by row
         mutate(Hours=-1*eval(parse(text=Hours))) %>% #convert numeric and mutiply by -1 since the shift formatter (-) sums up negatively 
         mutate_at(vars(-Staff,-Hours),funs(str_replace_all(.,"[//.]5", ':30'))) #reformat the shifts for output
@@ -263,6 +278,7 @@ server <- function(input, output, session) {
       unite(Hours,-Staff,sep="|",remove=FALSE) %>% 
       mutate(Hours=if_else(str_replace_all(Hours,"[\\|]","")=="","0",Hours)) %>% 
       mutate(Hours=str_replace_all(Hours, "[\\|]", "+")) %>% 
+      mutate(Hours=paste(Hours, "0", sep="+")) %>% 
       rowwise() %>% 
       mutate(Hours=-1*eval(parse(text=Hours))) %>% 
       mutate_at(vars(-Staff,-Hours),funs(str_replace_all(.,"[//.]5", ':30')))
@@ -379,7 +395,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$del,{
     
-    validate(need(input$user==boss,"You are not authorized!"))
+    validate(need(input$user %in% boss,"You are not authorized!"))
     
     db <- dbConnect(MySQL(), dbname = databaseName, host = options()$mysql$host, 
                     port = options()$mysql$port, user = options()$mysql$user, 
@@ -429,3 +445,6 @@ server <- function(input, output, session) {
 
 
 shinyApp(ui, server)
+
+#library(rsconnect)
+#rsconnect::deployApp("/home/andr31/R/github/resto")
