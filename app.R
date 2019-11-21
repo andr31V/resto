@@ -8,6 +8,38 @@ library(DT)
 names <- c("Jon","Luca","Munir")
 boss <- "Jon"
 
+Sys.setenv(TZ='CET') #copenhagen
+
+options(mysql = list(
+  "host" = "remotemysql.com",
+  "port" = 3306,
+  "user" = "T0oPZcxIgs",
+  "password" = "ZM2LECu1kV"
+))
+databaseName <- "T0oPZcxIgs"
+
+
+dbup <- function(dat,qry_up,qry_dup) {
+#upload
+  vals <- dat %>% 
+    rowwise() %>% 
+    mutate_all(funs(paste0("'",.,"'"))) %>% 
+    unite(tmpvar,sep=",") %>% 
+    mutate_all(funs(paste0("(",.,")"))) %>% 
+    unlist() %>%  
+    paste(.,collapse=",") %>% 
+    as.character()
+  query <- paste(qry_up,vals)
+  db <- dbConnect(MySQL(), dbname = databaseName, host = options()$mysql$host, 
+                  port = options()$mysql$port, user = options()$mysql$user, 
+                  password = options()$mysql$password)
+  dbGetQuery(db, query)
+#dedupe
+  dbGetQuery(db,qry_dup)
+  dbDisconnect(db)
+  
+} 
+
 ui <- 
 
 fluidPage(
@@ -45,6 +77,7 @@ body {
 
 #buy{background-color:yellow}
 #sell{background-color:red}
+#del{background-color:blue}
 
 .dataTables_filter, .dataTables_info, .dataTables_paginate, .dataTables_length   {
 color: black !important;
@@ -60,9 +93,9 @@ above block is used for data table navigation text
     ),
   sidebarLayout( 
     sidebarPanel(width=4,
-      selectInput("user","Select User",choices=c("Enter Your Name"="",names), selected=boss),
+      selectInput("user","Select User",choices=c("Enter Your Name"="",names)),
       fluidRow(column(12,h4(HTML("<b>Schedule Horizon:</b>")))),
-      selectInput("name","Select Staff",choices=names,selected=boss,multiple=TRUE),
+      selectInput("name","Select Staff",choices=names,multiple=TRUE),
       fluidRow(
         column(6,dateInput("date1","Start")),
         column(6,dateInput("date2","End"))
@@ -84,13 +117,17 @@ above block is used for data table navigation text
     mainPanel(
       column(12,h1("Schedule")),
       DTOutput(outputId = "schedule"),
+      column(12,actionButton("upd_sched","Update")),
       column(12,h1("Changes")),
       DTOutput(outputId = "details"),
+      column(6,actionButton("upd_deets","Update")),
       fluidRow(column(1,actionButton("sell","   Sell   ")),
-               column(1,actionButton("buy","   Buy   "))
+               column(1,actionButton("buy","   Buy   ")),
+               column(1,actionButton("del","  Delete  "))
                ),
       fluidRow(tableOutput("test")),
-      fluidRow(tableOutput("test2"))
+      fluidRow(tableOutput("test2")),
+      textOutput("test3")
       
     )
     
@@ -107,37 +144,59 @@ server <- function(input, output, session) {
   values <- reactiveValues()
   
   observe({
-  
-  d1 <- input$date1
-  d2 <- input$date2 
-  days <- seq(d1,d2,1)
+    
+    
+    d1 <- input$date1
+    d2 <- input$date2 
+    days <- seq(d1,d2,1)
+    
+    db <- dbConnect(MySQL(), dbname = databaseName, host = options()$mysql$host, 
+                    port = options()$mysql$port, user = options()$mysql$user, 
+                    password = options()$mysql$password)
+    
+  datexist <- dbGetQuery(db,"select * from fabro_fixd") %>% 
+    select(-timestamp) %>% 
+    filter(as.Date(date)<=d2 & as.Date(date)>=d1)
+    
   sched <- data.frame(
-    id="",
-    days=days,
+    staff="",
+    date=as.character(days),
     stringsAsFactors = FALSE
   ) %>% 
-    spread(days,id) %>%
-    mutate(id=1)
-  staff <- data.frame(id=1,Staff=names,stringsAsFactors = FALSE)
+    bind_rows(datexist) %>% 
+    replace(., is.na(.), "") %>% 
+    spread(date,shift) %>% 
+    right_join(data.frame(staff=names,stringsAsFactors = FALSE),by="staff")
   
-  values$df <- staff %>% 
-    inner_join(sched,by="id") %>% 
-    select(-id) %>% 
+  values$df <- sched %>% 
+    rename("Staff"=staff) %>% 
+    replace(., is.na(.), "") %>% 
     unite(Hours,-Staff,sep="|",remove=FALSE) %>% 
     mutate(Hours=if_else(str_replace_all(Hours,"[\\|]","")=="","0",Hours)) %>% 
     mutate(Hours=str_replace_all(Hours, "[\\|]", "+")) %>% 
+    mutate(Hours=paste(Hours, "0", sep="+")) %>% #in case there's a leftover + sign 
     rowwise() %>% 
     mutate(Hours=-1*eval(parse(text=Hours)))
 
-  values$df2 <- data.frame(
-   Shift_Date=character(),
-   Shift_Time=character(),
-   Seller=character(),
-   Seller_Comments=character(),
-   Buyer=character(), #this should be a comma separated list
-   #Buyer_Comments=character(),
-   #Manager_Comments=character(),
-   stringsAsFactors = FALSE)
+  values$df2 <- dbGetQuery(db,"select * from fabro_temp") %>% 
+    rename(
+      "Shift_Date"=shift_date,
+      "Shift_Time"=shift_time,
+      "Seller"=seller,
+      "Seller_Comments"=seller_comments,
+      "Buyer"=buyer,
+    ) %>% 
+    select(-timestamp) 
+   #data.frame(
+   #Shift_Date=character(),
+   #Shift_Time=character(),
+   #Seller=character(),
+   #Seller_Comments=character(),
+   #Buyer=character(), #this should be a comma separated list
+   #stringsAsFactors = FALSE)
+  
+  
+  dbDisconnect(db)
   
   })
   
@@ -276,16 +335,92 @@ server <- function(input, output, session) {
     )
   })
   
-  output$test<- renderTable({
-    test <- values$df %>% 
+  observeEvent(input$upd_sched,{
+    
+    sched <- values$df %>% 
       select(-Hours) %>% 
       gather(Date,Shift,-Staff) %>% 
       filter(Shift!=""&is.null(Shift)==FALSE)
-    test
+    now <- as.POSIXlt(Sys.time())
+    now.str <- format(now,'%Y-%m-%d %H:%M:%S')
+    if(nrow(sched)>0) {
+    sched$timestamp <- now.str
+    
+    dbup(sched,"insert into fabro_fixd values","delete b from fabro_fixd a inner join fabro_fixd b on a.staff=b.staff and a.date=b.date and a.timestamp > b.timestamp")
+    
+    showNotification("Update successful!")
+    }
+    else {
+      showNotification("No data to update!")
+    }
+    
+  })
+  
+  
+  observeEvent(input$upd_deets,{
+    
+    now <- as.POSIXlt(Sys.time())
+    now.str <- format(now,'%Y-%m-%d %H:%M:%S')
+    
+    deets <- values$df2
+    
+    if(nrow(deets)>0) {
+      deets$timestamp <- now.str
+      
+      dbup(deets,"insert into fabro_temp values","delete b from fabro_temp a inner join fabro_temp b on a.shift_date=b.shift_date and a.seller=b.seller and a.timestamp > b.timestamp")
+      
+      showNotification("Update successful!")
+    }
+    else {
+      showNotification("No data to update!")
+    }
+    
+  })
+  
+  observeEvent(input$del,{
+    
+    validate(need(input$user==boss,"You are not authorized!"))
+    
+    db <- dbConnect(MySQL(), dbname = databaseName, host = options()$mysql$host, 
+                    port = options()$mysql$port, user = options()$mysql$user, 
+                    password = options()$mysql$password)
+    
+    dbGetQuery(db,"delete from fabro_temp")
+    
+    dbDisconnect(db)
+    
+    showNotification("Delete successful - reload page")
+    
+  })
+
+  
+  output$test<- renderTable({
+   # test <- values$df %>% 
+   #   select(-Hours) %>% 
+   #   gather(Date,Shift,-Staff) %>% 
+   #   filter(Shift!=""&is.null(Shift)==FALSE)
   })
   
   output$test2 <- renderTable({
-    values$df2
+    
+   # query <- "create table test_t(staff varchar(5) DEFAULT 'VLAD', shift varchar(20), timestamp datetime)"
+   # query <- "create table fabro_fixd (staff varchar(10), date varchar(10), shift varchar(20), timestamp datetime)"
+   # query <- "create table fabro_temp (shift_date varchar(10),	shift_time varchar(20),	seller varchar(10),	seller_comments varchar(50),	buyer varchar(10), timestamp datetime)"
+   # query    <-"(select *, row_number() over (partition by staff, shift order by timestamp desc) as rnk from test_t where rnk=1"
+   # query    <-"delete b from test_t a inner join test_t b on a.staff=b.staff and a.shift=b.shift and a.timestamp > b.timestamp"
+   # query    <- "select * from fabro_fixd"
+   # 
+   # db <- dbConnect(MySQL(), dbname = databaseName, host = options()$mysql$host, 
+   #                 port = options()$mysql$port, user = options()$mysql$user, 
+   #                 password = options()$mysql$password) 
+   # data <- dbGetQuery(db, query)
+   # dbDisconnect(db)
+   # 
+   # data
+  })
+  
+  output$test3 <- renderText({
+
   })
   
   
