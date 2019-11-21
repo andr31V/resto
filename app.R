@@ -20,30 +20,30 @@ fluidPage(
         font-family: 'Dancing Script', cursive;
         font-weight: 700;
         line-height: 1.1;
-        color: #FBDD63;
+        color: #1A4C64; 
       }
       
       .box.box-solid.box-primary>.box-header {
   color:#fff;
-  background:#FBDD63
+  background:#1A4C64
                     }
 
 .box.box-solid.box-primary{
-border-bottom-color:#FBDD63;
-border-left-color:#FBDD63;
-border-right-color:#FBDD63;
-border-top-color:#FBDD63;
+border-bottom-color:#1A4C64;
+border-left-color:#1A4C64;
+border-right-color:#1A4C64;
+border-top-color:#1A4C64;
 }
 
 body { 
-            background-color: #1A4C64;
+            background-color: pink;
             color:black
             
             
 }
 
 
-#buy{background-color:green}
+#buy{background-color:yellow}
 #sell{background-color:red}
 
 .dataTables_filter, .dataTables_info, .dataTables_paginate, .dataTables_length   {
@@ -60,9 +60,9 @@ above block is used for data table navigation text
     ),
   sidebarLayout( 
     sidebarPanel(width=4,
-      selectInput("user","Select User",choices=c("Enter Your Name"="",names)),
+      selectInput("user","Select User",choices=c("Enter Your Name"="",names), selected=boss),
       fluidRow(column(12,h4(HTML("<b>Schedule Horizon:</b>")))),
-      selectInput("name","Select Staff",choices=names,multiple=TRUE),
+      selectInput("name","Select Staff",choices=names,selected=boss,multiple=TRUE),
       fluidRow(
         column(6,dateInput("date1","Start")),
         column(6,dateInput("date2","End"))
@@ -155,6 +155,7 @@ server <- function(input, output, session) {
     
     validate(need(input$user==boss , paste("Only",boss,"can submit shifts")))
     validate(need(!is.null(input$name) ,"Please select staff to assign"))
+    validate(need(!is.null(input$date), "Please select a date to assign"))
     validate(need(input$start<input$end ,"Please select a valid time frame"))
     
     actionButton("submit","Submit")
@@ -169,25 +170,28 @@ server <- function(input, output, session) {
   
   observeEvent(input$submit,{
     
-    if(!is.null(input$date)) {
-      
+      #step1: create concatenated shift field in case of multiple shifts per day (add-on instead of erasing)
       shift <- paste(input$start,input$end,sep='-') 
-      values$df[values$df$Staff %in% input$name,input$date] <- #str_replace(
+      old_shift <- values$df[values$df$Staff %in% input$name,input$date][[1]]
+      if(grepl(str_replace_all(shift,c(":30"=".5","[//|]"="")),str_replace_all(old_shift,c(":30"=".5","[//|]"="")))==FALSE) #prevent duplicates!
+      {
+      values$df[values$df$Staff %in% input$name,input$date] <- #str_replace( 
         as.character(
         paste(
-        values$df[values$df$Staff %in% input$name,input$date][[1]],
+        old_shift,
         shift,
         sep="|")
       )
       #, "[//|]", "")
       values$df <- values$df %>% 
-        select(-Hours) %>% 
-        unite(Hours,-Staff,sep="|",remove=FALSE) %>% 
-        mutate(Hours=if_else(str_replace_all(Hours,"[\\|]","")=="","0",Hours)) %>% 
-        mutate(Hours=str_replace_all(Hours, "[\\|]", "+")) %>% 
-        rowwise() %>% 
-        mutate(Hours=-1*eval(parse(text=Hours))) %>% 
-        mutate_at(vars(-Staff,-Hours),funs(str_replace_all(.,".5", ':30')))
+        select(-Hours) %>% #remove the current hours calculation
+        unite(Hours,-Staff,sep="|",remove=FALSE) %>%  #create a combined column of all shift strings
+        mutate(Hours=if_else(str_replace_all(Hours,"[\\|]","")=="","0",Hours)) %>%  #if there are no shifts, set hours=0. otherwise...
+        mutate(Hours=str_replace_all(Hours, "[\\|]", "+")) %>% #replace the shift separator - | - into the + sign to automatically calculate
+        mutate(Hours=str_replace_all(Hours,":30", '.5')) %>%  #ensure formatted data read in correctly for mathematical calculation
+        rowwise() %>%  #calculate row by row
+        mutate(Hours=-1*eval(parse(text=Hours))) %>% #convert numeric and mutiply by -1 since the shift formatter (-) sums up negatively 
+        mutate_at(vars(-Staff,-Hours),funs(str_replace_all(.,"[//.]5", ':30'))) #reformat the shifts for output
     }
      })
   
@@ -202,7 +206,7 @@ server <- function(input, output, session) {
       mutate(Hours=str_replace_all(Hours, "[\\|]", "+")) %>% 
       rowwise() %>% 
       mutate(Hours=-1*eval(parse(text=Hours))) %>% 
-      mutate_at(vars(-Staff,-Hours),funs(str_replace_all(.,".5", ':30')))
+      mutate_at(vars(-Staff,-Hours),funs(str_replace_all(.,"[//.]5", ':30')))
   })
   
   
@@ -273,7 +277,11 @@ server <- function(input, output, session) {
   })
   
   output$test<- renderTable({
-    values$df
+    test <- values$df %>% 
+      select(-Hours) %>% 
+      gather(Date,Shift,-Staff) %>% 
+      filter(Shift!=""&is.null(Shift)==FALSE)
+    test
   })
   
   output$test2 <- renderTable({
