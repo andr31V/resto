@@ -28,6 +28,7 @@ options(mysql = list(
   "host" = "remotemysql.com",
   "port" = 3306,
   "user" = "T0oPZcxIgs",
+  #"user" = "PGrCf5FBnm"
   "password" = "ZM2LECu1kV"
 ))
 databaseName <- "T0oPZcxIgs"
