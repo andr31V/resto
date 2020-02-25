@@ -27,11 +27,10 @@ Sys.setenv(TZ='CET') #copenhagen
 options(mysql = list(
   "host" = "remotemysql.com",
   "port" = 3306,
-  "user" = "T0oPZcxIgs",
-  #"user" = "PGrCf5FBnm"
-  "password" = "ZM2LECu1kV"
+  "user" = "PGrCf5FBnm",
+  "password" = "DmKQQeltE6"
 ))
-databaseName <- "T0oPZcxIgs"
+databaseName <- "PGrCf5FBnm"
 
 
 dbup <- function(dat,qry_up,qry_dup) {
